@@ -32,22 +32,38 @@ saas-data-platform/
 ```
 
 ## 2. Instrucciones de Configuración (Setup)
-El proyecto requiere Python 3.11+, PySpark 3.5.x y Delta Lake 3.x.
-Para inicializar el entorno y garantizar la reproducibilidad de las dependencias, ejecuta los siguientes comandos en tu terminal:
+El proyecto requiere **Python 3.11+**, **Java 11**, PySpark 3.5.x y Delta Lake 3.x.
 
-Crear y activar el entorno virtual:
+### 2.1 Entorno Virtual y Dependencias (General)
+Para inicializar el entorno y garantizar la reproducibilidad, ejecuta en tu terminal:
 
-	#2.1 En Windows
-	python -m venv .venv
-	.venv\Scripts\activate
-	
-	#2.2 Instalar dependencias del proyecto:
-	pip install -e .
-	(Nota: Esto instalará automáticamente pyspark, delta-spark, omegaconf y herramientas de desarrollo según lo declarado en el archivo de configuración).
+```bash
+# 1. Crear y activar entorno virtual
+python -m venv .venv
+.venv\Scripts\activate      # En Windows
+# source .venv/bin/activate # En Mac/Linux
 
-	#2.3 Ubicación de los datos iniciales:
-	Asegúrate de colocar los archivos global_mobility_data_entrega_productos.csv y materials_catalog.csv dentro de la carpeta data/raw/ antes de la primera 
-	ejecución.
+# 2. Instalar dependencias del proyecto
+pip install -e .
+```
+
+**Datos iniciales:** Asegúrate de colocar los archivos `global_mobility_data_entrega_productos.csv` y `materials_catalog.csv` dentro de la carpeta `data/raw/` antes de la primera ejecución.
+
+### 2.2 Configuración Local (Exclusivo para evaluadores en Windows)
+*(Nota: Si evalúas este repositorio en Mac, Linux o clústeres nativos de Databricks, omite este paso).*
+
+PySpark y Delta Lake en Windows requieren dependencias nativas de Hadoop (`winutils`) para gestionar los permisos de archivos en el log transaccional de forma local. En una terminal **PowerShell**, corre este bloque antes de lanzar el pipeline:
+
+```powershell
+# 1. Descargar dependencias nativas y configurar Hadoop
+New-Item -Path "C:\hadoop\bin" -ItemType Directory -Force
+Invoke-WebRequest -Uri "[https://raw.githubusercontent.com/kontext-tech/winutils/master/hadoop-3.3.1/bin/winutils.exe](https://raw.githubusercontent.com/kontext-tech/winutils/master/hadoop-3.3.1/bin/winutils.exe)" -OutFile "C:\hadoop\bin\winutils.exe"
+Invoke-WebRequest -Uri "[https://raw.githubusercontent.com/kontext-tech/winutils/master/hadoop-3.3.1/bin/hadoop.dll](https://raw.githubusercontent.com/kontext-tech/winutils/master/hadoop-3.3.1/bin/hadoop.dll)" -OutFile "C:\hadoop\bin\hadoop.dll"
+$env:HADOOP_HOME="C:\hadoop"
+
+# 2. Configurar Java Home usando Short Path para evitar errores de espacios
+$env:JAVA_HOME="C:\Progra~1\Java\jdk-11.0.26"
+```
 	
 ## 3. Ejecución del Pipeline
 El pipeline se ejecuta a través del CLI centralizado. El motor de Spark se inicializa de forma local con soporte nativo para formato Delta.

@@ -4,6 +4,7 @@ from pathlib import Path
 from pyspark.sql import SparkSession
 from saas_pipeline.config import load_config
 from saas_pipeline.bronze import ingest_deliveries_to_bronze, ingest_catalog_to_bronze
+from saas_pipeline.silver import process_dim_materials_silver, process_fact_deliveries_silver
 
 def main():
     # 1. Captura de argumentos
@@ -64,6 +65,37 @@ def main():
         ingest_catalog_to_bronze(spark, catalog_raw, catalog_bronze)
         
         print(f"[{tenant.upper()}] -> Capa BRONZE completada.")
+        
+        # --- CAPA SILVER ---
+        print(f"[{tenant.upper()}] -> Iniciando Capa SILVER")
+        
+        # 1. Definición de rutas Silver y Cuarentena (dinámicas por tenant)
+        dim_materials_silver = f"{cfg.paths.silver}/{tenant}/dim_materials"
+        deliveries_silver = f"{cfg.paths.silver}/{tenant}/fact_deliveries"
+        
+        # La arquitectura exige que la cuarentena use una ruta base distinta 
+        quarantine_silver = f"{cfg.paths.quarantine_root}/silver_quarantine/{tenant}/fact_deliveries"
+
+        # 2. Ejecución 1: Dimensiones (SCD Type 2)
+        # Se lee del catálogo recién creado en Bronze y se escribe en Silver [cite: 52]
+        process_dim_materials_silver(
+            spark=spark,
+            raw_path=catalog_bronze, 
+            silver_path=dim_materials_silver
+        )
+
+        # 3. Ejecución 2: Hechos (Limpieza y cruce)
+        # Se leen las entregas de Bronze y se cruzan con el catálogo que acabamos de actualizar en Silver
+        process_fact_deliveries_silver(
+            spark=spark,
+            bronze_deliveries_path=deliveries_bronze,
+            silver_dim_materials_path=dim_materials_silver,
+            silver_deliveries_path=deliveries_silver,
+            quarantine_path=quarantine_silver,
+            tenant=tenant
+        )
+        
+        print(f"[{tenant.upper()}] -> Capa SILVER completada.")
 
     # Cierre limpio
     spark.stop()
