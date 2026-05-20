@@ -5,6 +5,8 @@ from pyspark.sql import SparkSession
 from saas_pipeline.config import load_config
 from saas_pipeline.bronze import ingest_deliveries_to_bronze, ingest_catalog_to_bronze
 from saas_pipeline.silver import process_dim_materials_silver, process_fact_deliveries_silver
+from saas_pipeline.quality import run_silver_quality_checks, log_quality_results
+from datetime import datetime
 
 def main():
     # 1. Captura de argumentos
@@ -96,6 +98,34 @@ def main():
         )
         
         print(f"[{tenant.upper()}] -> Capa SILVER completada.")
+        
+        # --- DATA QUALITY (SILVER) ---
+        print(f"[{tenant.upper()}] -> Ejecutando Data Quality Checks")
+        
+        # Generamos un batch_id simple basado en el timestamp de ejecución
+        batch_id = datetime.now().strftime("%Y%md%H%M")
+        quality_logs_path = f"{cfg.paths.quality_logs}"
+        
+        # Extraemos el flag de seguridad de la configuración (por defecto False si no existe)
+        fail_on_critical = cfg.get("quality", {}).get("fail_on_critical", False)
+
+        # 1. Ejecutar las reglas
+        dq_logs = run_silver_quality_checks(
+            spark=spark, 
+            silver_path=deliveries_silver, 
+            tenant=tenant, 
+            batch_id=batch_id
+        )
+        
+        # 2. Persistir los resultados y abortar si hay error crítico
+        log_quality_results(
+            spark=spark, 
+            logs=dq_logs, 
+            quality_logs_path=quality_logs_path, 
+            fail_on_critical=fail_on_critical
+        )
+        
+        print(f"[{tenant.upper()}] -> Data Quality completado.")
 
     # Cierre limpio
     spark.stop()

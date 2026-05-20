@@ -52,32 +52,27 @@ pip install -e .
 ### 2.2 Configuración Local (Exclusivo para evaluadores en Windows)
 *(Nota: Si evalúas este repositorio en Mac, Linux o clústeres nativos de Databricks, omite este paso).*
 
-PySpark y Delta Lake en Windows requieren dependencias nativas de Hadoop (`winutils`) para gestionar los permisos de archivos en el log transaccional de forma local. En una terminal **PowerShell**, corre este bloque antes de lanzar el pipeline:
+PySpark y Delta Lake en Windows requieren dependencias nativas de Hadoop (`winutils`). En una terminal **PowerShell**, ejecuta este bloque por única vez para descargar los binarios. 
+Las variables de entorno problemáticas se manejarán automáticamente en tiempo de ejecución mediante el script `run.ps1`:
 
-```powershell
-# 1. Descargar dependencias nativas y configurar Hadoop
+``` Terminal
 New-Item -Path "C:\hadoop\bin" -ItemType Directory -Force
 Invoke-WebRequest -Uri "[https://raw.githubusercontent.com/kontext-tech/winutils/master/hadoop-3.3.1/bin/winutils.exe](https://raw.githubusercontent.com/kontext-tech/winutils/master/hadoop-3.3.1/bin/winutils.exe)" -OutFile "C:\hadoop\bin\winutils.exe"
 Invoke-WebRequest -Uri "[https://raw.githubusercontent.com/kontext-tech/winutils/master/hadoop-3.3.1/bin/hadoop.dll](https://raw.githubusercontent.com/kontext-tech/winutils/master/hadoop-3.3.1/bin/hadoop.dll)" -OutFile "C:\hadoop\bin\hadoop.dll"
-$env:HADOOP_HOME="C:\hadoop"
-
-# 2. Configurar Java Home usando Short Path para evitar errores de espacios
-$env:JAVA_HOME="C:\Progra~1\Java\jdk-11.0.26"
 ```
-	
 ## 3. Ejecución del Pipeline
-El pipeline se ejecuta a través del CLI centralizado. El motor de Spark se inicializa de forma local con soporte nativo para formato Delta.
+El pipeline se ejecuta a través de un CLI centralizado. El motor de Spark se inicializa de forma local con soporte nativo para formato Delta.
 
-	# 3.1 Procesar un tenant específico (Ej: El Salvador):
+**Para usuarios en Windows:**
+Se provee un script envoltorio (`run.ps1`) que inyecta las variables de entorno de Java, Spark y Hadoop de forma efímera para evitar conflictos con las configuraciones 
+globales del sistema operativo.
+``` Terminal
+# Procesar un tenant específico (Ej: El Salvador)
+.\run.ps1 sv
 
-	python src/saas_pipeline/cli.py --tenant sv
-	Procesar todos los tenants activos:
-
-	# 3.2 Procesar todos los tenants activos:
-	python src/saas_pipeline/cli.py --tenant all
-
-FinOps Note: El pipeline garantiza un cierre limpio de la sesión (spark.stop()) al finalizar, liberando recursos inmediatamente para evitar consumo innecesario 
-de créditos en despliegues sobre clústeres cloud.
+# Procesar todos los tenants activos
+.\run.ps1 all
+```
 
 ## 4. Onboarding de un Nuevo Tenant
 La plataforma cumple estrictamente con el requerimiento de "mínima fricción" para adherir nuevas unidades de negocio. El proceso de onboarding es 100% dinámico 
