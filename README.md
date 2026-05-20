@@ -10,6 +10,7 @@ mediante configuración jerárquica con OmegaConf.
 
 La estructura del proyecto respeta la separación entre configuración, código fuente y datos locales:
 
+```text
 saas-data-platform/
 ├── .github/                   # Workflows de CI/CD (GitHub Actions)
 ├── config/                    # Configuración jerárquica con OmegaConf
@@ -28,6 +29,7 @@ saas-data-platform/
 ├── Makefile                   # Comandos rápidos para ejecución y validación
 ├── pyproject.toml             # Gestión de dependencias
 └── README.md                  # Documentación principal
+```
 
 ## 2. Instrucciones de Configuración (Setup)
 El proyecto requiere Python 3.11+, PySpark 3.5.x y Delta Lake 3.x.
