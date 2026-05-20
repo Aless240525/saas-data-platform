@@ -1,0 +1,11 @@
+paths:
+  raw: "data/raw"
+  bronze: "data/bronze"
+  silver: "data/silver"
+  gold: "data/gold"
+  quarantine_root: "data"
+  quality_logs: "data/shared/quality_logs"
+
+files:
+  deliveries_raw: "global_mobility_data_entrega_productos.csv"
+  catalog_raw: "materials_catalog.csv"

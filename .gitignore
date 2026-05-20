@@ -1,0 +1,22 @@
+# Entornos y binarios
+.venv/
+__pycache__/
+*.pyc
+
+# Datos locales y logs
+data/
+logs/
+
+# PySpark local temporales
+spark-warehouse/
+metastore_db/
+derby.log
+
+# Cachés de Testing y Linter
+.pytest_cache/
+.ruff_cache/
+.coverage
+
+# IDEs (VSCode, IntelliJ, etc)
+.vscode/
+.idea/
