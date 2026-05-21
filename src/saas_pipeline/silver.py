@@ -5,19 +5,16 @@ from delta.tables import DeltaTable
 import os
 
 def process_dim_materials_silver(spark: SparkSession, raw_path: str, silver_path: str):
-    """
-    Procesa el catálogo de materiales hacia Silver aplicando lógica SCD Type 2.
-    """
-    # 1. Leer de Raw (El catálogo se lee de raw directo o bronze, según tu flujo. 
-    # Aquí lo leemos de Bronze asumiendo que ya se ingesto como Delta, pero validamos tipos)
+
+    # 1. Leer de Raw
     df_bronze = spark.read.format("delta").load(raw_path)
 
-    # Castear fechas para el join temporal
+    # Castear fechas
     df_silver = df_bronze.withColumn("valid_from", F.col("valid_from").cast(DateType())) \
                          .withColumn("valid_to", F.col("valid_to").cast(DateType())) \
                          .withColumn("precio_base", F.col("precio_base").cast(DecimalType(10, 2)))
 
-    # 2. Idempotencia: MERGE INTO usando material + valid_from (SCD Type 2)
+    # 2. Idempotencia: MERGE INTO
     if DeltaTable.isDeltaTable(spark, silver_path):
         target_table = DeltaTable.forPath(spark, silver_path)
         target_table.alias("target").merge(
@@ -31,22 +28,20 @@ def process_dim_materials_silver(spark: SparkSession, raw_path: str, silver_path
         df_silver.write.format("delta").mode("overwrite").save(silver_path)
 
 def process_fact_deliveries_silver(spark: SparkSession, bronze_deliveries_path: str, silver_dim_materials_path: str, silver_deliveries_path: str, quarantine_path: str, tenant: str):
-    """
-    Procesa las transacciones aplicando limpieza, normalización, validaciones y cruce SCD Type 2.
-    """
+
     # 1. Lectura
     df_fact = spark.read.format("delta").load(bronze_deliveries_path)
     df_dim = spark.read.format("delta").load(silver_dim_materials_path)
 
     # --- LA MAGIA ESTÁ AQUÍ ---
-    # Seleccionamos SOLO lo útil de la dimensión y renombramos la llave para que no choque con df_fact
+    # Seleccionamos SOLO lo útil de la dimensión
     dim_cols = ["material", "descripcion", "categoria", "precio_base", "valid_from", "valid_to"]
     df_dim_clean = df_dim.select(*dim_cols).withColumnRenamed("material", "dim_material")
 
-    # 2. Deduplicación exacta
+    # 2. Deduplicación
     df_fact = df_fact.dropDuplicates()
 
-    # 3. Reglas de Negocio (Limpieza y Flags)
+    # 3. Reglas de Negocio
     valid_tipos = ["ZPRE", "ZVE1", "Z04", "Z05"]
     df_fact = df_fact.filter(F.col("tipo_entrega").isin(valid_tipos))
 
@@ -60,7 +55,7 @@ def process_fact_deliveries_silver(spark: SparkSession, bronze_deliveries_path: 
 
     df_fact = df_fact.withColumn("fecha_date", F.to_date(F.col("fecha_proceso"), "yyyyMMdd"))
 
-    # 4. Join Temporal (SCD Type 2) con el catálogo limpio
+    # 4. Join Temporal con el catálogo limpio
     join_cond = [
         df_fact["material"] == df_dim_clean["dim_material"],
         df_fact["fecha_date"] >= df_dim_clean["valid_from"],
@@ -79,20 +74,20 @@ def process_fact_deliveries_silver(spark: SparkSession, bronze_deliveries_path: 
          .otherwise(None)
     )
 
-    # 6. Split: Registros Válidos vs Cuarentena
-    # Válidos: Descartamos las columnas temporales (ya no hay basura duplicada)
+    # 6. Registros Válidos y Cuarentena
+    
     cols_to_drop = ["fecha_date", "dim_material", "valid_from", "valid_to", "_quarantine_reason"]
     df_valid = df_validated.filter(F.col("_quarantine_reason").isNull()).drop(*cols_to_drop)
 
-    # Cuarentena: Rescatamos las columnas originales del fact + el motivo
+
     cols_to_keep_quarantine = [col for col in df_fact.columns if col != "fecha_date"] + ["_quarantine_reason"]
     df_quarantine = df_validated.filter(F.col("_quarantine_reason").isNotNull()).select(*cols_to_keep_quarantine)
 
-    # 7. Escritura de Cuarentena (Append para mantener historial de errores)
+    # 7. carga a Cuarentena 
     if not df_quarantine.isEmpty():
         df_quarantine.write.format("delta").mode("append").save(quarantine_path)
 
-    # 8. Idempotencia en Silver Válidos (MERGE INTO)
+    # 8. Idempotencia en Silver
     merge_condition = """
         target._tenant_id = source._tenant_id AND 
         target.fecha_proceso = source.fecha_proceso AND 

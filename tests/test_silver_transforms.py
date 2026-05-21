@@ -3,7 +3,6 @@ from pyspark.sql import SparkSession
 from pyspark.sql import Row
 from pyspark.sql import functions as F
 
-# Fixture para inicializar Spark una sola vez por sesión de pruebas
 @pytest.fixture(scope="session")
 def spark():
     return SparkSession.builder \

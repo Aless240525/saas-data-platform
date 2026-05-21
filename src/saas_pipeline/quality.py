@@ -5,9 +5,7 @@ import uuid
 from datetime import datetime
 
 def run_silver_quality_checks(spark: SparkSession, silver_path: str, tenant: str, batch_id: str):
-    """
-    Ejecuta 3 validaciones de calidad (Buenas prácticas) sobre la tabla Silver de hechos.
-    """
+
     df_silver = spark.read.format("delta").load(silver_path)
     
     run_id = str(uuid.uuid4())
@@ -16,8 +14,7 @@ def run_silver_quality_checks(spark: SparkSession, silver_path: str, tenant: str
     
     logs = []
 
-    # 1. Unicidad de Clave de Negocio (Severidad: critical)
-    # Por qué: Evita que un error en el origen o en el MERGE duplique ingresos.
+    # 1. Unicidad de Clave de Negocio
     distinct_records = df_silver.dropDuplicates(["_tenant_id", "fecha_proceso", "transporte", "ruta", "material", "tipo_entrega"]).count()
     failed_uniqueness = total_records - distinct_records
     
@@ -35,8 +32,7 @@ def run_silver_quality_checks(spark: SparkSession, silver_path: str, tenant: str
         "executed_at": executed_at
     })
 
-    # 2. Cantidad Positiva Post-Normalización (Severidad: critical)
-    # Por qué: Asegura que la conversión de cajas (CS) a unidades (ST) no generó nulos o negativos matemáticos.
+    # 2. Cantidad Positiva 
     failed_qty = df_silver.filter(F.col("cantidad_normalizada_st") <= 0).count()
     
     logs.append({
@@ -53,8 +49,7 @@ def run_silver_quality_checks(spark: SparkSession, silver_path: str, tenant: str
         "executed_at": executed_at
     })
 
-    # 3. Consistencia de Precios en Rutina (Severidad: warning)
-    # Por qué: Regla de negocio. Las bonificaciones (Z04, Z05) pueden ser gratis (0), pero la rutina (ZPRE) no debería.
+    # 3. Consistencia de Precios
     failed_price = df_silver.filter((F.col("is_routine_delivery") == True) & (F.col("precio") <= 0)).count()
     
     logs.append({
@@ -74,13 +69,11 @@ def run_silver_quality_checks(spark: SparkSession, silver_path: str, tenant: str
     return logs
 
 def log_quality_results(spark: SparkSession, logs: list, quality_logs_path: str, fail_on_critical: bool):
-    """
-    Escribe en data/shared/quality_logs respetando el esquema estricto (5.9) y aborta si es necesario.
-    """
+
     if not logs:
         return
 
-    # Esquema exacto exigido en la arquitectura
+
     schema = StructType([
         StructField("_run_id", StringType(), True),
         StructField("_batch_id", StringType(), True),
@@ -97,10 +90,10 @@ def log_quality_results(spark: SparkSession, logs: list, quality_logs_path: str,
 
     logs_df = spark.createDataFrame(logs, schema)
     
-    # Se usa append porque es una tabla compartida cross-tenant
+
     logs_df.write.format("delta").mode("append").save(quality_logs_path)
 
-    # El freno de seguridad: abortar antes de Gold si falla un critical
+    # El freno de seguridad: abortar antes de Gold si hay un falllo critico
     if fail_on_critical:
         critical_failures = [log for log in logs if log["check_severity"] == "critical" and not log["check_passed"]]
         if critical_failures:

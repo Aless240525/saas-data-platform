@@ -18,7 +18,7 @@ def main():
     parser.add_argument("--end-date", type=str, required=False, help="Fecha fin YYYY-MM-DD")
     args = parser.parse_args()
 
-    # 2. Inicializar Spark con soporte Delta
+    # 2. Inicializar Spark con Delta
     spark = SparkSession.builder \
         .appName("SAAS_Data_Platform") \
         .config("spark.jars.packages", "io.delta:delta-spark_2.12:3.1.0") \
@@ -37,7 +37,7 @@ def main():
         tenant_dir = Path("config/tenants")
         tenants_to_process = [file.stem for file in tenant_dir.glob("*.yaml")]
         
-        # Freno de seguridad si la carpeta está vacía
+        # si la carpeta está vacía...
         if not tenants_to_process:
             print("ERROR: No se encontraron archivos de configuración en config/tenants/")
             sys.exit(1)
@@ -45,25 +45,25 @@ def main():
         # Si pasan un país específico, solo procesa ese
         tenants_to_process = [target_tenant]
     
-# --- VALIDACIÓN FAIL-FAST ---
-    # 1. Leer dinámicamente los tenants que realmente existen en la carpeta de configuración
-    valid_tenants = [f.replace(".yaml", "") for f in os.listdir("config/tenants") if f.endswith(".yaml")]
-    
-    # 2. Verificar que el parámetro ingresado esté dentro de los válidos
-    for t in tenants_to_process:
-        if t not in valid_tenants:
-            print(f"ERROR CRÍTICO: El tenant '{t}' no existe o no tiene configuración.")
-            print(f"Para hacer onboarding, crea un archivo vacío en 'config/tenants/{t}.yaml'.")
-            sys.exit(1)  # Aborta la ejecución inmediatamente con código de error
-# ----------------------------
+        # --- VALIDACIÓN FAIL-FAST ---
+        # 1. Leer dinámicamente los tenants que realmente existen en la carpeta de configuración
+        valid_tenants = [f.replace(".yaml", "") for f in os.listdir("config/tenants") if f.endswith(".yaml")]
+        
+        # 2. Verificar que el parámetro ingresado esté dentro de los válidos
+        for t in tenants_to_process:
+            if t not in valid_tenants:
+                print(f"ERROR CRÍTICO: El tenant '{t}' no existe o no tiene configuración.")
+                print(f"Para hacer onboarding, crea un archivo vacío en 'config/tenants/{t}.yaml'.")
+                sys.exit(1)  # Aborta la ejecución
+        # ----------------------------
     
     print(f"-> Iniciando pipeline. Tenants a procesar: {tenants_to_process}")
 
-    # Rutas de origen (Leídas 100% del YAML, cero hardcodeo)
+    # Rutas de origen
     deliveries_raw = f"{cfg.paths.raw}/{cfg.files.deliveries_raw}"
     catalog_raw = f"{cfg.paths.raw}/{cfg.files.catalog_raw}"
 
-    # 5. EL BUCLE PRINCIPAL (Itera por cada país)
+
     for tenant in tenants_to_process:
         print(f"\n=========================================")
         print(f"=== PROCESANDO TENANT: {tenant.upper()} ===")
@@ -72,7 +72,7 @@ def main():
         # --- CAPA BRONZE ---
         print(f"[{tenant.upper()}] -> Iniciando Capa BRONZE")
         
-        # Las rutas destino se arman dinámicamente para el tenant actual del bucle
+        # Las rutas destino se arman dinámicamente
         deliveries_bronze = f"{cfg.paths.bronze}/{tenant}/deliveries"
         catalog_bronze = f"{cfg.paths.bronze}/{tenant}/dim_materials"
 
@@ -95,15 +95,14 @@ def main():
         # --- CAPA SILVER ---
         print(f"[{tenant.upper()}] -> Iniciando Capa SILVER")
         
-        # 1. Definición de rutas Silver y Cuarentena (dinámicas por tenant)
+        # 1. Definicioon de rutas silver y cuarentena
         dim_materials_silver = f"{cfg.paths.silver}/{tenant}/dim_materials"
         deliveries_silver = f"{cfg.paths.silver}/{tenant}/fact_deliveries"
         
-        # La arquitectura exige que la cuarentena use una ruta base distinta 
+        
         quarantine_silver = f"{cfg.paths.quarantine_root}/silver_quarantine/{tenant}/fact_deliveries"
 
         # 2. Ejecución 1: Dimensiones (SCD Type 2)
-        # Se lee del catálogo recién creado en Bronze y se escribe en Silver [cite: 52]
         process_dim_materials_silver(
             spark=spark,
             raw_path=catalog_bronze, 
@@ -111,7 +110,6 @@ def main():
         )
 
         # 3. Ejecución 2: Hechos (Limpieza y cruce)
-        # Se leen las entregas de Bronze y se cruzan con el catálogo que acabamos de actualizar en Silver
         process_fact_deliveries_silver(
             spark=spark,
             bronze_deliveries_path=deliveries_bronze,
@@ -126,11 +124,11 @@ def main():
         # --- DATA QUALITY (SILVER) ---
         print(f"[{tenant.upper()}] -> Ejecutando Data Quality Checks")
         
-        # Generamos un batch_id simple basado en el timestamp de ejecución
+
         batch_id = datetime.now().strftime("%Y%md%H%M")
         quality_logs_path = f"{cfg.paths.quality_logs}"
         
-        # Extraemos el flag de seguridad de la configuración (por defecto False si no existe)
+        
         fail_on_critical = cfg.get("quality", {}).get("fail_on_critical", False)
 
         # 1. Ejecutar las reglas
@@ -141,7 +139,7 @@ def main():
             batch_id=batch_id
         )
         
-        # 2. Persistir los resultados y abortar si hay error crítico
+        # 2. Guardar los resultados
         log_quality_results(
             spark=spark, 
             logs=dq_logs, 
@@ -154,10 +152,10 @@ def main():
         # --- CAPA GOLD ---
         print(f"[{tenant.upper()}] -> Iniciando Capa GOLD")
         
-        # Ruta dinámica para el tenant
+        # Ruta dinámica
         metrics_gold_path = f"{cfg.paths.gold}/{tenant}/daily_metrics_by_delivery_type"
         
-        # Ejecutar agregación
+        # Agregación
         process_daily_metrics_gold(
             spark=spark, 
             silver_deliveries_path=deliveries_silver, 
