@@ -26,9 +26,9 @@ saas-data-platform/
 │   └── saas_pipeline/         # Código fuente del pipeline PySpark
 ├── tests/                     # Pruebas unitarias con pytest
 ├── .gitignore                 # Exclusión de entornos virtuales y datos locales
-├── Makefile                   # Comandos rápidos para ejecución y validación
-├── pyproject.toml             # Gestión de dependencias
-└── README.md                  # Documentación principal
+├── pyproject.toml             # Gestión de dependencias y configuración de herramientas
+├── README.md                  # Documentación principal
+└── run.ps1                    # Script principal de ejecución y orquestación (PowerShell)
 ```
 
 ## 2. Instrucciones de Configuración (Setup)
