@@ -101,3 +101,23 @@ pip install pytest
 # 2. Ejecutar la suite completa de pruebas
 pytest tests/
 ```
+### Qué dejé fuera y por qué
+
+* **Filtrado por rango de fechas (`--start-date`, `--end-date`):** El requerimiento de procesar por rangos de fechas (sección 6.1) fue omitido en favor de priorizar la 
+completitud y robustez de la lógica de transformación core (SCD2, aislamiento multi-tenant, testing y observabilidad). Dado el tiempo de la prueba y el objetivo de entregar un 
+MVP funcional, procesar la totalidad del archivo de ingesta garantiza la evaluación completa de las reglas de calidad de datos y las métricas Gold sin añadir complejidad 
+artificial al orquestador. En un despliegue productivo (Horizonte 2), se delegaría el manejo incremental a Databricks Auto Loader, haciendo redundante el manejo manual de 
+rangos de fechas.
+
+## Versiones Utilizadas
+* Python 3.11
+* PySpark 3.5.x
+* Delta Lake 3.x (delta-spark)
+
+## Guía de Onboarding para un nuevo Tenant
+Para agregar un nuevo tenant (ej. `co` para Colombia) siguiendo la arquitectura:
+1. **Configuración:** Crear el archivo `config/tenants/co.yaml` con parámetros específicos si los hubiera.
+2. **Infraestructura (Terraform):** Ejecutar el módulo de IaC para aprovisionar el schema en Unity Catalog (`saas_dev.bronze_co`, `saas_dev.silver_co`, etc.) y crear las rutas 
+físicas en ADLS Gen2.
+3. **Ejecución:** El pipeline es dinámico. Al lanzar `.\run.ps1 co`, el orquestador leerá la configuración, filtrará los datos de origen para ese tenant y escribirá en sus rutas 
+aisladas automáticamente.
