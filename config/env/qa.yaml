@@ -1,0 +1,3 @@
+environment: "qa"
+paths:
+  base_root: "data/"
