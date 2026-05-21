@@ -1,4 +1,5 @@
 import argparse
+import os
 import sys
 from pathlib import Path
 from pyspark.sql import SparkSession
@@ -6,6 +7,7 @@ from saas_pipeline.config import load_config
 from saas_pipeline.bronze import ingest_deliveries_to_bronze, ingest_catalog_to_bronze
 from saas_pipeline.silver import process_dim_materials_silver, process_fact_deliveries_silver
 from saas_pipeline.quality import run_silver_quality_checks, log_quality_results
+from saas_pipeline.gold import process_daily_metrics_gold
 from datetime import datetime
 
 def main():
@@ -42,7 +44,19 @@ def main():
     else:
         # Si pasan un país específico, solo procesa ese
         tenants_to_process = [target_tenant]
-
+    
+# --- VALIDACIÓN FAIL-FAST ---
+    # 1. Leer dinámicamente los tenants que realmente existen en la carpeta de configuración
+    valid_tenants = [f.replace(".yaml", "") for f in os.listdir("config/tenants") if f.endswith(".yaml")]
+    
+    # 2. Verificar que el parámetro ingresado esté dentro de los válidos
+    for t in tenants_to_process:
+        if t not in valid_tenants:
+            print(f"ERROR CRÍTICO: El tenant '{t}' no existe o no tiene configuración.")
+            print(f"Para hacer onboarding, crea un archivo vacío en 'config/tenants/{t}.yaml'.")
+            sys.exit(1)  # Aborta la ejecución inmediatamente con código de error
+# ----------------------------
+    
     print(f"-> Iniciando pipeline. Tenants a procesar: {tenants_to_process}")
 
     # Rutas de origen (Leídas 100% del YAML, cero hardcodeo)
@@ -63,8 +77,18 @@ def main():
         catalog_bronze = f"{cfg.paths.bronze}/{tenant}/dim_materials"
 
         # Ingestar
-        ingest_deliveries_to_bronze(spark, deliveries_raw, deliveries_bronze)
-        ingest_catalog_to_bronze(spark, catalog_raw, catalog_bronze)
+        ingest_deliveries_to_bronze(
+            spark=spark, 
+            raw_path=deliveries_raw, 
+            bronze_path=deliveries_bronze, 
+            tenant=tenant
+        )
+        
+        ingest_catalog_to_bronze(
+            spark=spark, 
+            raw_path=catalog_raw, 
+            bronze_path=catalog_bronze
+        )
         
         print(f"[{tenant.upper()}] -> Capa BRONZE completada.")
         
@@ -126,6 +150,21 @@ def main():
         )
         
         print(f"[{tenant.upper()}] -> Data Quality completado.")
+        
+        # --- CAPA GOLD ---
+        print(f"[{tenant.upper()}] -> Iniciando Capa GOLD")
+        
+        # Ruta dinámica para el tenant
+        metrics_gold_path = f"{cfg.paths.gold}/{tenant}/daily_metrics_by_delivery_type"
+        
+        # Ejecutar agregación
+        process_daily_metrics_gold(
+            spark=spark, 
+            silver_deliveries_path=deliveries_silver, 
+            gold_metrics_path=metrics_gold_path
+        )
+        
+        print(f"[{tenant.upper()}] -> Capa GOLD completada.")
 
     # Cierre limpio
     spark.stop()

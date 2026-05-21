@@ -3,17 +3,20 @@ import pyspark.sql.functions as F
 from pyspark.sql.types import StringType
 import uuid
 
-def ingest_deliveries_to_bronze(spark: SparkSession, raw_path: str, bronze_path: str, batch_id: str = None):
+def ingest_deliveries_to_bronze(spark: SparkSession, raw_path: str, bronze_path: str, tenant: str, batch_id: str = None):
     """
     Ingesta el archivo transaccional a Bronze.
-    Aplica particionado dinámico por fecha_proceso y _tenant_id.
+    Aplica particionado dinámico por fecha_proceso y _tenant_id, 
+    filtrando estrictamente los datos del tenant correspondiente.
     """
     if not batch_id:
         batch_id = str(uuid.uuid4())
 
     df_raw = spark.read.csv(raw_path, header=True, inferSchema=True)
 
-    df_bronze = df_raw.withColumn("_ingestion_timestamp", F.current_timestamp()) \
+    # Transformación y FILTRADO estricto por tenant
+    df_bronze = df_raw.filter(F.lower(F.col("pais")) == tenant) \
+                      .withColumn("_ingestion_timestamp", F.current_timestamp()) \
                       .withColumn("_source_file", F.input_file_name()) \
                       .withColumn("_batch_id", F.lit(batch_id).cast(StringType())) \
                       .withColumn("_tenant_id", F.lower(F.col("pais")))
@@ -21,7 +24,7 @@ def ingest_deliveries_to_bronze(spark: SparkSession, raw_path: str, bronze_path:
     (df_bronze.write
         .format("delta")
         .mode("overwrite")
-        .partitionBy("fecha_proceso", "_tenant_id")
+        .partitionBy("fecha_proceso")  # <-- Corregido: eliminada la redundancia de tenant
         .option("partitionOverwriteMode", "dynamic")
         .save(bronze_path))
     

@@ -88,3 +88,16 @@ Para agregar un nuevo país (ej: Colombia, con código co):
 
 El orquestador (cli.py) detectará automáticamente el archivo, agregará a Colombia a la lista de iteración y compondrá dinámicamente sus rutas de almacenamiento 
 (ej: data/bronze/co/deliveries).
+
+## 5. Pruebas Unitarias y CI
+El proyecto incluye una suite de pruebas automatizadas aisladas en memoria para garantizar la integridad de las transformaciones de negocio (conversiones, filtros) y las reglas de calidad de datos.
+
+Para ejecutar la suite de pruebas localmente, asegúrate de tener instaladas las dependencias de desarrollo (`pytest`):
+
+```bash
+# 1. Instalar librería de testing (si no se instaló con el entorno base)
+pip install pytest
+
+# 2. Ejecutar la suite completa de pruebas
+pytest tests/
+```
